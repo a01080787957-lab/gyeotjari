@@ -13,7 +13,7 @@ export default function RootLayout({ children }) {
       <body>
         <header>
           <Link href="/" className="logo">곁자리</Link>
-          <nav><Link href="/#services">서비스</Link><Link href="/#price">가격</Link><Link href="/#faq">자주 묻는 질문</Link><Link href="/reserve">예약</Link><NavAuth /></nav>
+          <nav><Link href="/#services">서비스</Link><Link href="/#price">가격</Link><Link href="/#faq">자주 묻는 질문</Link><Link href="/reserve">예약</Link><Link href="/chat">상담</Link><NavAuth /></nav>
         </header>
         <main>{children}</main>
       </body>

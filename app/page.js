@@ -35,6 +35,7 @@ export default function Home() {
   const [open, setOpen] = useState({});
   const [tile, setTile] = useState(-1);
   const [loaded, setLoaded] = useState(false);
+  const [revs, setRevs] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -42,6 +43,8 @@ export default function Home() {
       const b = await supabase.from('site_settings').select('key,value');
       setServices(a.data || []);
       setCfg(Object.fromEntries((b.data || []).map((r) => [r.key, r.value])));
+      const c = await supabase.from('reviews').select('rating,content,created_at,services(name)').eq('is_published', true).order('created_at', { ascending: false }).limit(6);
+      setRevs(c.data || []);
       setLoaded(true);
     })();
   }, []);
@@ -63,11 +66,12 @@ export default function Home() {
           <div className="cta">
             <a className="btn" href="#services">서비스 둘러보기</a>
             <Link className="btn alt" href="/reserve">예약 신청하기</Link>
+            <Link className="btn alt" href="/chat">채팅 상담</Link>
             <a className="btn alt" href={'tel:' + tel}>전화 문의</a>
             {kbtn('btn alt')}
           </div>
         </div>
-        <div className="ph">{cfg.hero_image_url ? <img src={cfg.hero_image_url} alt="" /> : '대표 이미지 영역'}</div>
+        <div className="ph"><img src={cfg.hero_image_url || '/images/hero.svg'} alt="곁자리 일러스트" /></div>
       </div>
 
       <div className="wrap"><div className="trust">
@@ -80,7 +84,7 @@ export default function Home() {
         <div className="grid">
           {services.map((s) => (
             <article className="svc" key={s.slug}>
-              <div className="ph">{s.image_url ? <img src={s.image_url} alt="" /> : '서비스 이미지 영역'}</div>
+              <div className="ph"><img src={s.image_url || '/images/' + s.slug + '.svg'} alt={s.name} /></div>
               <div className="body">
                 <h3>{s.name}</h3><p>{s.summary}</p><div className="price">{s.price_label}</div>
                 <ul style={{ margin: 0, paddingLeft: '1.2em', fontSize: 16 }}>
@@ -165,7 +169,8 @@ export default function Home() {
       </div></section>
 
       <section id="reviews"><div className="wrap" style={{ textAlign: 'center' }}>
-        <h2>이용 후기</h2><div className="box">곧 이용 고객의 실제 후기를 만나보세요.</div>
+        <h2>이용 후기</h2>
+        {revs.length === 0 ? <div className="box">곧 이용 고객의 실제 후기를 만나보세요.</div> : <div className="grid" style={{ textAlign: 'left' }}>{revs.map((r, i) => <div className="box" key={i}><div style={{ color: 'var(--gold)' }}>{'★'.repeat(r.rating)}</div><p>{r.content}</p><span className="muted">{r.services?.name} · {r.created_at.slice(0, 10)}</span></div>)}</div>}
       </div></section>
 
       <section id="faq" className="band"><div className="wrap">
@@ -180,12 +185,13 @@ export default function Home() {
       </div></section>
 
       <footer style={{ padding: '28px 20px 100px', textAlign: 'center', color: 'var(--sub)', fontSize: 15 }}>
-        곁자리 · 항상 곁에 있겠습니다 &lt;곁자리 드림&gt;<br />의료·간병·요양 서비스가 아닙니다.
+        곁자리 · 항상 곁에 있겠습니다 &lt;곁자리 드림&gt;<br />의료·간병·요양 서비스가 아닙니다.<br /><Link href="/privacy">개인정보 처리방침</Link>
       </footer>
 
       <div className="contact">
         <a className="btn" href={'tel:' + tel}>전화</a>
         {kbtn('btn alt')}
+        <Link className="btn alt" href="/chat">채팅</Link>
         <Link className="btn alt" href="/reserve">예약</Link>
       </div>
     </div>

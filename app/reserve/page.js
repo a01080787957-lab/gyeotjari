@@ -9,8 +9,8 @@ const won = (n) => Number(n).toLocaleString('ko-KR') + '원';
 export default function Reserve() {
   const [user, setUser] = useState(undefined);
   const [services, setServices] = useState([]);
-  const [f, setF] = useState({ slug: '', reserve_date: '', reserve_time: '', name: '', phone: '', address: '', request: '', extra: 0, hours: 1, regular: false, agree: false, scope: false });
-  const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [done, setDone] = useState(false);
+  const [f, setF] = useState({ slug: '', region: '', reserve_date: '', reserve_time: '', name: '', phone: '', address: '', request: '', extra: 0, hours: 1, regular: false, agree: false, scope: false });
+  const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [done, setDone] = useState(false); const [cfg, setCfg] = useState({}); const [taken, setTaken] = useState({});
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
   useEffect(() => {
@@ -22,12 +22,24 @@ export default function Reserve() {
       const { data: p } = await supabase.from('profiles').select('name,phone').eq('id', u.id).single();
       const { data: list } = await supabase.from('services').select('*').eq('is_active', true).order('sort_order');
       const want = new URLSearchParams(location.search).get('service');
+      const { data: st } = await supabase.from('site_settings').select('key,value').in('key', ['time_slots', 'closed_weekdays', 'blocked_dates', 'max_per_slot', 'regions']);
+      setCfg(Object.fromEntries((st || []).map((r) => [r.key, r.value])));
       setServices(list || []);
       setF((x) => ({ ...x, name: p?.name || '', phone: p?.phone || '', slug: (list || []).find((v) => v.slug === want)?.slug || '' }));
     })();
   }, []);
 
+  useEffect(() => {
+    if (!f.reserve_date) return;
+    supabase.rpc('taken_slots', { d: f.reserve_date }).then(({ data }) => setTaken(Object.fromEntries((data || []).map((r) => [r.t, r.n]))));
+  }, [f.reserve_date]);
+  const max = Number(cfg.max_per_slot) || 1;
   const svc = services.find((v) => v.slug === f.slug);
+  const list2 = (k) => (cfg[k] || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const times = list2('time_slots').length ? list2('time_slots') : TIMES;
+  const closed = list2('closed_weekdays');
+  const regions = list2('regions');
+  const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
   let hours = null, price = null;
   if (svc?.base_price) {
     const ex = Number(f.extra);
@@ -41,15 +53,18 @@ export default function Reserve() {
   async function submit(e) {
     e.preventDefault(); setErr('');
     if (!f.scope) return setErr('제공하지 않는 업무 안내를 확인해주세요.');
+    if (regions.length && !f.region) return setErr('지역을 선택해주세요.');
     if (!f.agree) return setErr('개인정보 수집·이용에 동의해주세요.');
+    if (closed.includes(String(new Date(f.reserve_date + 'T00:00:00').getDay()))) return setErr('선택하신 요일은 쉬는 날입니다. 다른 날짜를 선택해주세요.');
+    if (list2('blocked_dates').includes(f.reserve_date)) return setErr('선택하신 날짜는 예약이 어렵습니다. 다른 날짜를 선택해주세요.');
     setBusy(true);
     const { error } = await supabase.from('reservations').insert({
       user_id: user.id, service_id: svc.id, reserve_date: f.reserve_date, reserve_time: f.reserve_time,
-      name: f.name, phone: f.phone, address: f.address, request: f.request, privacy_agreed: true,
+      name: f.name, phone: f.phone, address: f.address, region: f.region || null, request: f.request, privacy_agreed: true,
       hours, is_regular: !!svc.base_price && f.regular, est_price: price
     });
     setBusy(false);
-    if (error) return setErr('예약 신청에 실패했습니다: ' + error.message);
+    if (error) return setErr(error.message.includes('SLOT_FULL') ? '방금 다른 분이 예약한 시간입니다. 다른 시간을 선택해주세요.' : '예약 신청에 실패했습니다: ' + error.message);
     setDone(true);
   }
 
@@ -85,17 +100,18 @@ export default function Reserve() {
         <div className="est">예상 금액 <b>{won(price)}</b><br /><span className="muted">{hours}시간 기준 · 실제 금액은 상담 후 확정됩니다{svc.slug === 'errand' ? ' · 긴급 요청은 비용이 올라갈 수 있습니다' : ''}</span></div>
       )}
 
-      <label>날짜</label><input required type="date" min={today} value={f.reserve_date} onChange={set('reserve_date')} />
+      <label>날짜</label><input required type="date" min={today} value={f.reserve_date} onChange={set('reserve_date')} />{closed.length > 0 && <span className="muted">쉬는 요일: {closed.map((d) => DAYS[Number(d)]).join(', ')}</span>}
       <label>시간</label>
       <select required value={f.reserve_time} onChange={set('reserve_time')}>
-        <option value="">선택해주세요</option>{TIMES.map((t) => <option key={t}>{t}</option>)}
+        <option value="">선택해주세요</option>{times.map((t) => { const full = (taken[t] || 0) >= max; return <option key={t} value={t} disabled={full}>{t}{full ? ' (마감)' : ''}</option>; })}
       </select>
       <label>이름</label><input required value={f.name} onChange={set('name')} />
       <label>전화번호</label><input required type="tel" inputMode="tel" value={f.phone} onChange={set('phone')} />
-      <label>주소</label><input required value={f.address} onChange={set('address')} placeholder="서비스 받으실 주소" />
-      <label>요청사항</label><textarea rows="4" value={f.request} onChange={set('request')} />
+      {regions.length > 0 && (<><label>지역</label><select required value={f.region} onChange={set('region')}><option value="">선택해주세요</option>{regions.map((r) => <option key={r}>{r}</option>)}</select></>)}
+      <label>상세 주소</label><input required value={f.address} onChange={set('address')} placeholder="서비스 받으실 주소" />
+      <label>요청할 일</label><textarea rows="4" value={f.request} onChange={set('request')} />
       <label><input type="checkbox" checked={f.scope} onChange={set('scope')} />의료행위·투약·간병·위험한 작업은 제공되지 않음을 확인했습니다 (필수)</label>
-      <label><input type="checkbox" checked={f.agree} onChange={set('agree')} />개인정보 수집·이용에 동의합니다 (필수)</label>
+      <label><input type="checkbox" checked={f.agree} onChange={set('agree')} /><Link href="/privacy" target="_blank">개인정보 처리방침</Link>에 따른 개인정보 수집·이용에 동의합니다 (필수)</label>
       <button disabled={busy || !svc}>{busy ? '신청 중...' : '예약 신청하기'}</button>
       {err && <p className="err">{err}</p>}
     </form>

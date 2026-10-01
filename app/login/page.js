@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
+import SocialButtons from '../SocialButtons';
 
 export default function Login() {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
@@ -24,11 +25,7 @@ export default function Login() {
       <button disabled={busy}>{busy ? '확인 중...' : '로그인'}</button>
       {err && <p className="err">{err}</p>}
       <p className="muted">처음이신가요? <Link href="/signup">회원가입</Link></p>
-      <div className="social">
-        <button type="button" disabled>Google (설정 필요)</button>
-        <button type="button" disabled>Kakao (설정 필요)</button>
-        <button type="button" disabled>Naver (설정 필요)</button>
-      </div>
+      <SocialButtons />
     </form>
   );
 }
